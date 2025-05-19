@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Controle de Frota</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+
+        header {
+            text-align: center;
+            padding: 1vh;
+            font-size: 1.5em;
+            font-weight: bold;
+            background-color: #004080;
+            color: white;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            padding: 10px;
+            flex-wrap: wrap;
+        }
+
+        .controls select, .controls input {
+            padding: 6px 10px;
+            font-size: 1em;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        .add-button {
+            background-color: #007bff;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+            box-shadow: 0px 4px 8px rgba(0,0,0,0.2);
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(6vw, 1fr));
+            grid-auto-rows: 8vh;
+            gap: 0.8vh;
+            padding: 1vh;
+            height: calc(100vh - 160px);
+            box-sizing: border-box;
+            overflow-y: auto;
+            justify-items: center;
+            align-items: center;
+        }
+
+        .car-card {
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            text-align: center;
+            padding: 0.5vh;
+            box-sizing: border-box;
+            color: white;
+            position: relative;
+            cursor: pointer;
+            font-size: 1vw;
+        }
+
+        .car-card .category {
+            font-size: 0.7em;
+            opacity: 0.9;
+        }
+
+        .liberado { background-color: #28a745; }
+        .liberado_com_ressalvas { background-color: #ffc107; color: #000; }
+        .em_conserto { background-color: #dc3545; }
+
+        .tooltip {
+            position: fixed; /* Alterado para fixed */
+            top: 50%;        /* Centraliza verticalmente */
+            left: 50%;       /* Centraliza horizontalmente */
+            transform: translate(-50%, -50%); /* Ajusta para o centro do elemento */
+            background-color: white;
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 10px;
+            z-index: 10;
+            display: none;
+            width: 200px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+            white-space: normal;
+        }
+
+        .tooltip p {
+            font-size: 0.85em;
+            margin-bottom: 6px;
+        }
+
+        .tooltip .tooltip-actions {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .tooltip-actions button,
+        .tooltip-actions a {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            text-decoration: none;
+            cursor: pointer;
+            color: white;
+        }
+
+        .edit-btn { background-color: #007bff; }
+        .delete-btn { background-color: #6c757d; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .modal-content input,
+        .modal-content select,
+        .modal-content textarea {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 6px;
+            box-sizing: border-box;
+        }
+
+        .modal-content .btn-group {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .close-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .submit-btn {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .controls-extra {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-counter {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1em;
+	    font-weight: bold;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .liberado-indicator { background-color: #28a745; }
+        .com-ressalvas-indicator { background-color: #ffc107; }
+        .em-conserto-indicator { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+
+<header>
+    <img src="{{ url_for('static', filename='frota.png') }}" style="height: 1.5em; vertical-align: middle; margin-right: 8px;">
+    Controle de Frota Marataízes
+</header>
+
+<div class="controls controls-extra">
+    <select id="categoryFilter">
+        <option value="">Categoria</option>
+        <option value="URBANO">Urbano (Necessário 12)</option>
+        <option value="RODOVIARIO">Rodoviário (Necessário 14)</option>
+        <option value="FRETAMENTO">Fretamento</option>
+    </select>
+    <select id="statusFilter">
+        <option value="">Todos os Status</option>
+        <option value="liberado">Liberado</option>
+        <option value="liberado_com_ressalvas">Com Ressalvas</option>
+        <option value="em_conserto">Em Conserto</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="Buscar por prefixo...">
+    <div class="status-counter">
+        <span class="status-indicator liberado-indicator"></span> Liberado: <span id="count-liberado">0</span>
+    </div>
+    <div class="status-counter">
+        <span class="status-indicator com-ressalvas-indicator"></span> Com Ressalvas: <span id="count-ressalvas">0</span>
+    </div>
+    <div class="status-counter">
+        <span class="status-indicator em-conserto-indicator"></span> Em Conserto: <span id="count-conserto">0</span>
+    </div>
+</div>
+
+<div class="grid-container">
+    {% for car in cars %}
+    <div class="car-card {{ car.status.name.lower() }}"
+         data-prefixo="{{ car.prefixo | lower }}"
+         data-categoria="{{ car.categoria.name }}"
+         data-status="{{ car.status.name.lower() }}"
+         onclick="toggleTooltip(this)">
+        <div>{{ car.prefixo }}</div>
+        <div class="category">{{ car.categoria.value }}</div>
+        <div class="tooltip">
+            <p><strong>Status:</strong> {{ car.status.value.replace('_', ' ').title() }}</p>
+            <p><strong>Categoria:</strong> {{ car.categoria.value }}</p>
+            {% if car.observacao %}
+                <p><strong>Obs:</strong> {{ car.observacao }}</p>
+            {% endif %}
+            <div class="tooltip-actions">
+                <form action="{{ url_for('car_bp.delete_car', car_id=car.id) }}" method="post" onsubmit="return confirm('Excluir este prefixo?')">
+                </form>
+            </div>
+            <div style="text-align: right; margin-top: 8px;">
+                <button onclick="event.stopPropagation(); this.closest('.tooltip').style.display='none'"
+                        style="font-size: 0.75em; background-color: #ccc; border: none; border-radius: 5px; padding: 4px 8px; cursor: pointer;">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <form action="{{ url_for('car_bp.add_car') }}" method="post">
+            <h3>Novo Carro</h3>
+            <input type="text" name="prefixo" placeholder="Prefixo" required>
+            <select name="status" required>
+                {% for status in car_status %}
+                    <option value="{{ status.name }}">{{ status.value.replace("_", " ") | title }}</option>
+                {% endfor %}
+            </select>
+            <select name="categoria" required>
+                <option value="URBANO">Urbano</option>
+                <option value="RODOVIARIO">Rodoviário</option>
+                <option value="FRETAMENTO">Fretamento</option>
+            </select>
+            <textarea name="observacao" placeholder="Observações (opcional)"></textarea>
+            <div class="btn-group">
+                <button type="button" class="close-btn" onclick="document.getElementById('addModal').style.display='none'">Cancelar</button>
+                <button type="submit" class="submit-btn">Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function toggleTooltip(card) {
+    document.querySelectorAll('.tooltip').forEach(t => t.style.display = 'none');
+    const tooltip = card.querySelector('.tooltip');
+    tooltip.style.display = 'block';
+}
+
+    document.getElementById('categoryFilter').addEventListener('change', applyFilters);
+    document.getElementById('statusFilter').addEventListener('change', applyFilters);
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+
+    function applyFilters() {
+        const category = document.getElementById('categoryFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const cards = document.querySelectorAll('.car-card');
+
+        let countLiberado = 0;
+        let countRessalvas = 0;
+        let countConserto = 0;
+
+        cards.forEach(card => {
+            const categoriaDoCarro = card.getAttribute('data-categoria');
+            const statusDoCarro = card.getAttribute('data-status');
+            const matchesCategory = !category || categoriaDoCarro === category;
+            const matchesStatus = !status || card.classList.contains(status);
+            const prefixo = card.getAttribute('data-prefixo');
+            const matchesSearch = prefixo.includes(search);
+            const shouldDisplay = (matchesCategory && matchesStatus && matchesSearch);
+            card.style.display = shouldDisplay ? '' : 'none';
+
+            if (shouldDisplay) {
+                if (statusDoCarro === 'liberado') {
+                    countLiberado++;
+                } else if (statusDoCarro === 'liberado_com_ressalvas') {
+                    countRessalvas++;
+                } else if (statusDoCarro === 'em_conserto') {
+                    countConserto++;
+                }
+            }
+        });
+
+        document.getElementById('count-liberado').textContent = countLiberado;
+        document.getElementById('count-ressalvas').textContent = countRessalvas;
+        document.getElementById('count-conserto').textContent = countConserto;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const container = document.querySelector('.grid-container');
+        const cards = Array.from(container.querySelectorAll('.car-card'));
+        const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+        cards.sort((a, b) => {
+            const prefixA = a.getAttribute('data-prefixo');
+            const prefixB = b.getAttribute('data-prefixo');
+            return collator.compare(prefixA, prefixB);
+        }).forEach(card => container.appendChild(card));
+
+        // Inicializa os contadores ao carregar a página
+        applyFilters();
+    });
+
+    function openEditModal(id, prefixo, status, categoria, observacao) {
+        document.getElementById('editPrefixo').value = prefixo;
+        document.getElementById('editStatus').value = status;
+        document.getElementById('editCategoria').value = categoria;
+        document.getElementById('editObservacao').value = observacao;
+        document.getElementById('editForm').action = `/edit/${id}`;
+        document.getElementById('editModal').style.display = 'block';
+    }
+// ... seu JavaScript existente ...
+
+    setInterval(() => {
+        location.reload();
+    }, 30000); // 30000 milissegundos = 30 segundos
+</script>
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <form id="editForm" method="POST">
+            <h3>Editar Carro</h3>
+            <input type="text" name="prefixo" id="editPrefixo" required>
+            <select name="status" id="editStatus" required>
+                {% for status in car_status %}
+                    <option value="{{ status.name }}">{{ status.value.replace("_", " ") | title }}</option>
+                {% endfor %}
+            </select>
+            <select name="categoria" id="editCategoria" required>
+                <option value="URBANO">Urbano</option>
+                <option value="RODOVIARIO">Rodoviário</option>
+                <option value="FRETAMENTO">Fretamento</option>
+            </select>
+            <textarea name="observacao" id="editObservacao" placeholder="Observações (opcional)"></textarea>
+            <div class="btn-group">
+                <button type="button" class="close-btn" onclick="document.getElementById('editModal').style.display='none'">Cancelar</button>
+                <button type="submit" class="submit-btn">Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>
+</body>
+</html>
